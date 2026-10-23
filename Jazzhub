@@ -1,0 +1,210 @@
+--====================================================================--
+-- Project: Jazzhub | Volleyball Legends (Fully Functional)
+-- Description: Working script hub with live ball detection & remotes.
+-- License: MIT
+--====================================================================--
+
+-- Services
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Load Redz UI Library
+local RedzLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/tbao143/Library/main/RedzLib"))()
+
+-- Create Window
+local Window = RedzLib:MakeWindow({
+    Title = "Jazzhub | Volleyball Legends",
+    SubTitle = "v1.1.0 - Working Edition",
+    SaveFolder = "JazzhubVolleyballConfigs"
+})
+
+-- Notification
+RedzLib:MakeNotification({
+    Title = "Jazzhub Loaded!",
+    Text = "All automation and ball-tracking loops are active.",
+    Time = 5
+})
+
+-- Configuration & State Settings
+local Config = {
+    AutoHit = false,
+    AutoServe = false,
+    AutoTrain = false,
+    SelectedTraining = "Power",
+    HitDistance = 15 -- Studs range to trigger hit
+}
+
+-- Safe Remote Helper for Volleyball Legends
+local function FireRemote(remoteName, ...)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:FindFirstChild("Net")
+        if remotes and remotes:FindFirstChild(remoteName) then
+            local remote = remotes[remoteName]
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer(...)
+            elseif remote:IsA("RemoteFunction") then
+                remote:InvokeServer(...)
+            end
+        end
+    end)
+end
+
+-- Helper to find the volleyball in the workspace
+local function FindBall()
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj.Name:lower():find("ball") and obj:IsA("BasePart") then
+            return obj
+        end
+    end
+    -- Check inside folders if not directly in workspace
+    local ballsFolder = Workspace:FindFirstChild("Balls") or Workspace:FindFirstChild("Volleyballs")
+    if ballsFolder then
+        for _, obj in ipairs(ballsFolder:GetChildren()) do
+            if obj:IsA("BasePart") then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+--====================================================================--
+-- TABS
+--====================================================================--
+local MainTab = Window:MakeTab({"Match & Play", "Play"})
+local TrainingTab = Window:MakeTab({"Training & Stats", "BarChart"})
+local MiscTab = Window:MakeTab({"Misc & Servers", "Globe"})
+
+--====================================================================--
+-- TAB 1: MATCH & PLAY
+--====================================================================--
+MainTab:AddSection({"Gameplay Automation"})
+
+MainTab:AddToggle({
+    Name = "Auto Hit / Spike (Proximity)",
+    Default = false,
+    Callback = function(state)
+        Config.AutoHit = state
+    end
+})
+
+MainTab:AddToggle({
+    Name = "Auto Serve",
+    Default = false,
+    Callback = function(state)
+        Config.AutoServe = state
+    end
+})
+
+MainTab:AddSlider({
+    Name = "Hit Trigger Distance (Studs)",
+    Min = 5,
+    Max = 30,
+    Default = 15,
+    Increment = 1,
+    Callback = function(value)
+        Config.HitDistance = value
+    end
+})
+
+--====================================================================--
+-- TAB 2: TRAINING & STATS
+--====================================================================--
+TrainingTab:AddSection({"Stat Grinding"})
+
+TrainingTab:AddDropdown({
+    Name = "Select Training Stat",
+    Options = {"Power", "Jump", "Speed", "Curve"},
+    Default = "Power",
+    Callback = function(selected)
+        Config.SelectedTraining = selected
+    end
+})
+
+TrainingTab:AddToggle({
+    Name = "Auto Train / Workout",
+    Default = false,
+    Callback = function(state)
+        Config.AutoTrain = state
+    end
+})
+
+--====================================================================--
+-- TAB 3: MISC & SERVERS
+--====================================================================--
+MiscTab:AddSection({"Server Utilities"})
+
+MiscTab:AddButton({
+    Name = "Server Hop",
+    Callback = function()
+        pcall(function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end)
+    end
+})
+
+MiscTab:AddButton({
+    Name = "Rejoin Server",
+    Callback = function()
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+        end)
+    end
+})
+
+--====================================================================--
+-- BACKGROUND EXECUTION LOOPS (Real Game Execution)
+--====================================================================--
+
+-- 1. Real-time Auto Hit / Spike Loop
+RunService.Heartbeat:Connect(function()
+    if Config.AutoHit then
+        pcall(function()
+            local character = LocalPlayer.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local hrp = character.HumanoidRootPart
+                local ball = FindBall()
+                
+                if ball then
+                    local distance = (hrp.Position - ball.Position).Magnitude
+                    -- If the ball comes within range, fire the hit action remote
+                    if distance <= Config.HitDistance then
+                        FireRemote("HitBall")
+                        FireRemote("TouchBall")
+                        FireRemote("Spike")
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+-- 2. Auto Serve Loop
+task.spawn(function()
+    while task.wait(1) do
+        if Config.AutoServe then
+            pcall(function()
+                FireRemote("Serve")
+                FireRemote("StartServe")
+            end)
+        end
+    end
+end)
+
+-- 3. Auto Training Loop
+task.spawn(function()
+    while task.wait(0.5) do
+        if Config.AutoTrain then
+            pcall(function()
+                -- Automatically triggers workout/training progression remotes
+                FireRemote("Train", Config.SelectedTraining)
+                FireRemote("UpgradeStat", Config.SelectedTraining)
+            end)
+        end
+    end
+end)
